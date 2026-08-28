@@ -19,7 +19,11 @@ declare module "vanta/dist/vanta.rings.min" {
     scaleMobile?: number;
   };
 
-  const RINGS: (options: VantaRingsOptions) => VantaRingsEffect;
+  export type VantaRingsFactory = (
+    options: VantaRingsOptions,
+  ) => VantaRingsEffect;
+
+  const RINGS: VantaRingsFactory;
 
   export default RINGS;
 }

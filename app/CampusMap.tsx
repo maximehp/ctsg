@@ -2,7 +2,10 @@
 
 import { useEffect, useRef, useState } from "react";
 import { Map } from "maplibre-gl";
-import type { VantaRingsEffect } from "vanta/dist/vanta.rings.min";
+import type {
+  VantaRingsEffect,
+  VantaRingsFactory,
+} from "vanta/dist/vanta.rings.min";
 
 const CAMERA_TARGET: [number, number] = [-73.9571674, 40.7545844];
 const LOOK_AT_TARGET: [number, number] = [-73.9550837, 40.7559414];
@@ -170,10 +173,16 @@ export function CampusMap() {
         void Promise.all([
           import("three"),
           import("vanta/dist/vanta.rings.min"),
-        ]).then(([THREE, { default: RINGS }]) => {
+        ]).then(([THREE, vantaModule]) => {
           if (isDisposed) {
             return;
           }
+
+          const RINGS = (
+            vantaModule.default as unknown as {
+              default: VantaRingsFactory;
+            }
+          ).default;
 
           ringsEffect = RINGS({
             el: ringsHost,
