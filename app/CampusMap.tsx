@@ -17,7 +17,7 @@ const START_HEIGHT = 320;
 const START_RADIUS = 1630;
 const ORBIT_TURNS = 0.5;
 const METERS_PER_LATITUDE_DEGREE = 111_320;
-const RINGS_ANCHOR: [number, number] = CAMERA_TARGET;
+const RINGS_ANCHOR: [number, number] = LOOK_AT_TARGET;
 
 type StyleLayer = {
   id: string;
@@ -92,6 +92,7 @@ export function CampusMap() {
       const buildingLayer = layers.find(
         (layer) => layer["source-layer"] === "building" && layer.source,
       );
+      const backgroundLayer = layers.find((layer) => layer.type === "background");
 
       if (!buildingLayer?.source) {
         setMapStatus("unavailable");
@@ -110,6 +111,10 @@ export function CampusMap() {
         if (!isBaseLayer) {
           map.setLayoutProperty(layer.id, "visibility", "none");
         }
+      }
+
+      if (backgroundLayer) {
+        map.setPaintProperty(backgroundLayer.id, "background-opacity", 0);
       }
 
       map.addLayer({
@@ -203,10 +208,10 @@ export function CampusMap() {
 
           syncRingsToScene = () => {
             const anchor = map.project(RINGS_ANCHOR);
-            const x = anchor.x - initialAnchor.x;
-            const y = anchor.y - initialAnchor.y;
-            const rotation = (map.getBearing() - initialBearing) * 0.16;
-            const scale = Math.pow(2, (map.getZoom() - initialZoom) * 0.07);
+            const x = (anchor.x - initialAnchor.x) * 0.12;
+            const y = (anchor.y - initialAnchor.y) * 0.12;
+            const rotation = (map.getBearing() - initialBearing) * 0.08;
+            const scale = Math.pow(2, (map.getZoom() - initialZoom) * 0.035);
 
             ringsHost.style.transform = `translate3d(${x}px, ${y}px, 0) rotate(${rotation}deg) scale(${scale})`;
           };
