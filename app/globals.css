@@ -94,44 +94,8 @@ a {
   inset: 0;
 }
 
-.map-sky-rings {
-  position: absolute;
-  top: -8%;
-  right: 16%;
-  left: -36%;
-  z-index: 0;
-  height: 74%;
-  overflow: hidden;
-  pointer-events: none;
-  opacity: 0.48;
-  transform-origin: 50% 58%;
-  will-change: transform;
-  -webkit-mask-image: linear-gradient(
-    to bottom,
-    transparent 0%,
-    #000 16%,
-    #000 68%,
-    transparent 100%
-  );
-  mask-image: linear-gradient(
-    to bottom,
-    transparent 0%,
-    #000 16%,
-    #000 68%,
-    transparent 100%
-  );
-}
-
-.map-sky-rings .vanta-canvas {
-  pointer-events: none;
-}
-
 .map-canvas .maplibregl-canvas {
   outline: none;
-}
-
-.map-canvas {
-  z-index: 1;
 }
 
 .map-canvas .maplibregl-ctrl-attrib {

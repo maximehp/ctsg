@@ -2,10 +2,6 @@
 
 import { useEffect, useRef, useState } from "react";
 import { Map } from "maplibre-gl";
-import type {
-  VantaRingsEffect,
-  VantaRingsFactory,
-} from "vanta/dist/vanta.rings.min";
 
 const CAMERA_TARGET: [number, number] = [-73.9571674, 40.7545844];
 const LOOK_AT_TARGET: [number, number] = [-73.9550837, 40.7559414];
@@ -17,8 +13,6 @@ const START_HEIGHT = 320;
 const START_RADIUS = 1630;
 const ORBIT_TURNS = 0.5;
 const METERS_PER_LATITUDE_DEGREE = 111_320;
-const RINGS_ANCHOR: [number, number] = LOOK_AT_TARGET;
-
 type StyleLayer = {
   id: string;
   type: string;
@@ -52,7 +46,6 @@ function getCameraPosition(progress: number): [number, number] {
 
 export function CampusMap() {
   const containerRef = useRef<HTMLDivElement | null>(null);
-  const ringsRef = useRef<HTMLDivElement | null>(null);
   const [mapStatus, setMapStatus] = useState("loading");
 
   useEffect(() => {
@@ -71,9 +64,6 @@ export function CampusMap() {
       attributionControl: { compact: true },
     });
     let animationFrame: number | undefined;
-    let ringsEffect: VantaRingsEffect | undefined;
-    let syncRingsToScene: (() => void) | undefined;
-    let isDisposed = false;
 
     const getCameraView = (progress: number) => {
       const cameraPosition = getCameraPosition(progress);
@@ -92,7 +82,6 @@ export function CampusMap() {
       const buildingLayer = layers.find(
         (layer) => layer["source-layer"] === "building" && layer.source,
       );
-      const backgroundLayer = layers.find((layer) => layer.type === "background");
 
       if (!buildingLayer?.source) {
         setMapStatus("unavailable");
@@ -111,10 +100,6 @@ export function CampusMap() {
         if (!isBaseLayer) {
           map.setLayoutProperty(layer.id, "visibility", "none");
         }
-      }
-
-      if (backgroundLayer) {
-        map.setPaintProperty(backgroundLayer.id, "background-opacity", 0);
       }
 
       map.addLayer({
@@ -173,54 +158,6 @@ export function CampusMap() {
         },
       });
 
-      const ringsHost = ringsRef.current;
-      if (ringsHost) {
-        void Promise.all([
-          import("three"),
-          import("vanta/dist/vanta.rings.min"),
-        ]).then(([THREE, vantaModule]) => {
-          if (isDisposed) {
-            return;
-          }
-
-          const RINGS = (
-            vantaModule.default as unknown as {
-              default: VantaRingsFactory;
-            }
-          ).default;
-
-          ringsEffect = RINGS({
-            el: ringsHost,
-            THREE,
-            backgroundAlpha: 0,
-            mouseControls: false,
-            touchControls: false,
-            gyroControls: false,
-            minHeight: 280,
-            minWidth: 320,
-            scale: 1.6,
-            scaleMobile: 2.1,
-          });
-
-          const initialAnchor = map.project(RINGS_ANCHOR);
-          const initialBearing = map.getBearing();
-          const initialZoom = map.getZoom();
-
-          syncRingsToScene = () => {
-            const anchor = map.project(RINGS_ANCHOR);
-            const x = (anchor.x - initialAnchor.x) * 0.12;
-            const y = (anchor.y - initialAnchor.y) * 0.12;
-            const rotation = (map.getBearing() - initialBearing) * 0.08;
-            const scale = Math.pow(2, (map.getZoom() - initialZoom) * 0.035);
-
-            ringsHost.style.transform = `translate3d(${x}px, ${y}px, 0) rotate(${rotation}deg) scale(${scale})`;
-          };
-
-          map.on("render", syncRingsToScene);
-          syncRingsToScene();
-        });
-      }
-
       const reducedMotion = window.matchMedia(
         "(prefers-reduced-motion: reduce)",
       ).matches;
@@ -252,14 +189,9 @@ export function CampusMap() {
     });
 
     return () => {
-      isDisposed = true;
       if (animationFrame !== undefined) {
         window.cancelAnimationFrame(animationFrame);
       }
-      if (syncRingsToScene) {
-        map.off("render", syncRingsToScene);
-      }
-      ringsEffect?.destroy();
       map.remove();
     };
   }, []);
@@ -267,7 +199,6 @@ export function CampusMap() {
   return (
     <div className="map-wrap">
       <div className="map-canvas" ref={containerRef} />
-      <div className="map-sky-rings" ref={ringsRef} aria-hidden="true" />
       {mapStatus === "loading" && <p className="map-status">LOADING CAMPUS MASSING</p>}
       {mapStatus === "unavailable" && (
         <p className="map-status">MAP DATA UNAVAILABLE</p>
