@@ -94,6 +94,68 @@ a {
   inset: 0;
 }
 
+.map-loader {
+  position: fixed;
+  z-index: 10;
+  inset: 0;
+  display: grid;
+  place-items: center;
+  padding: 24px;
+  background: var(--ink);
+  color: var(--paper);
+  opacity: 1;
+  transition: opacity 280ms ease;
+}
+
+.map-loader--releasing {
+  pointer-events: none;
+  opacity: 0;
+}
+
+.map-loader-card {
+  width: min(460px, 100%);
+}
+
+.map-loader-kicker,
+.map-loader-title {
+  margin: 0;
+  font-family: var(--font-geist-mono), monospace;
+  font-weight: 700;
+  letter-spacing: 0.02em;
+}
+
+.map-loader-kicker {
+  margin-bottom: 14px;
+  color: var(--acid);
+  font-size: 10px;
+}
+
+.map-loader-title {
+  margin-bottom: 16px;
+  font-size: clamp(20px, 3vw, 30px);
+  line-height: 1;
+}
+
+.map-loader-track {
+  height: 20px;
+  padding: 3px;
+  border: 1px solid var(--paper);
+}
+
+.map-loader-fill {
+  display: block;
+  width: 8%;
+  height: 100%;
+  background: var(--acid);
+  animation: map-loader-progress 1.2s cubic-bezier(0.25, 0.85, 0.35, 1) forwards;
+}
+
+.map-loader--releasing .map-loader-fill {
+  width: 100%;
+  animation: none;
+  transition: width 220ms ease-out;
+}
+
 .map-canvas .maplibregl-canvas {
   outline: none;
 }
@@ -206,5 +268,27 @@ a {
   .coordinate-mark {
     bottom: 34px;
     left: 28px;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .map-loader,
+  .map-loader-fill {
+    transition: none;
+    animation: none;
+  }
+
+  .map-loader-fill {
+    width: 82%;
+  }
+}
+
+@keyframes map-loader-progress {
+  from {
+    width: 8%;
+  }
+
+  to {
+    width: 86%;
   }
 }
