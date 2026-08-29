@@ -367,7 +367,7 @@ export function CampusMap() {
         paint: {
           "fill-extrusion-color": ["get", "color"],
           "fill-extrusion-height": ["get", "height"],
-          "fill-extrusion-opacity": 0.94,
+          "fill-extrusion-opacity": 1,
           "fill-extrusion-vertical-gradient": false,
         },
       });
