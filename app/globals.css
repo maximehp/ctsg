@@ -53,15 +53,18 @@ a {
   border-width: 0 0 1px;
 }
 
-.wordmark {
+.wordmark,
+.role {
   display: grid;
   gap: 1px;
-  color: var(--acid);
+  color: var(--paper);
   font-family: var(--font-geist-mono), monospace;
   font-size: 12px;
   font-weight: 700;
   letter-spacing: 0;
   line-height: 1;
+  text-decoration: underline;
+  text-underline-offset: 3px;
 }
 
 .role,
@@ -79,7 +82,6 @@ a {
 }
 
 .role {
-  color: var(--paper);
   text-align: right;
 }
 
