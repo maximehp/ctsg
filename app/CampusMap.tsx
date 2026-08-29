@@ -309,7 +309,14 @@ export function CampusMap() {
         filter: [
           "all",
           ["!=", ["get", "hide_3d"], true],
-          ["!", ["in", ["id"], 266199261, 524729284, 922315193]],
+          [
+            "!",
+            [
+              "in",
+              ["id"],
+              ["literal", [266199261, 524729284, 922315193]],
+            ],
+          ],
         ],
         paint: {
           "fill-extrusion-color": [
