@@ -38,7 +38,7 @@ const CORNELL_TECH_BUILDINGS: FeatureCollection<
   features: [
     {
       type: "Feature",
-      properties: { color: "#ff5e42", height: 19.4 },
+      properties: { color: "#ff5e42", height: 19 },
       geometry: {
         type: "Polygon",
         coordinates: [[
@@ -67,7 +67,7 @@ const CORNELL_TECH_BUILDINGS: FeatureCollection<
     },
     {
       type: "Feature",
-      properties: { color: "#f5c84c", height: 19.4 },
+      properties: { color: "#f5c84c", height: 19 },
       geometry: {
         type: "Polygon",
         coordinates: [[
@@ -88,7 +88,7 @@ const CORNELL_TECH_BUILDINGS: FeatureCollection<
     },
     {
       type: "Feature",
-      properties: { color: "#56c8df", height: 83.4 },
+      properties: { color: "#56c8df", height: 83 },
       geometry: {
         type: "Polygon",
         coordinates: [[
@@ -103,7 +103,7 @@ const CORNELL_TECH_BUILDINGS: FeatureCollection<
     },
     {
       type: "Feature",
-      properties: { color: "#b58bdd", height: 66.4 },
+      properties: { color: "#b58bdd", height: 66 },
       geometry: {
         type: "Polygon",
         coordinates: [[
@@ -303,39 +303,33 @@ export function CampusMap() {
         source: buildingLayer.source,
         "source-layer": "building",
         minzoom: 13,
-        filter: ["!=", ["get", "hide_3d"], true],
+        // The source combines the two low-rise campus buildings into one
+        // feature. Exclude those base features before drawing their precise,
+        // individually colored replacements below.
+        filter: [
+          "all",
+          ["!=", ["get", "hide_3d"], true],
+          ["!", ["in", ["id"], 266199261, 524729284, 922315193]],
+        ],
         paint: {
           "fill-extrusion-color": [
             "match",
-            ["id"],
-            // Carto's vector-tile feature IDs omit the OSM geometry suffix.
-            700380609,
-            "#ff5e42",
-            524727870,
-            "#f5c84c",
-            524729284,
-            "#56c8df",
-            922315193,
-            "#b58bdd",
-            [
-              "match",
-              ["%", ["to-number", ["id"], 0], 7],
-              0,
-              "#bedc45",
-              1,
-              "#e68267",
-              2,
-              "#76c7d0",
-              3,
-              "#d6a7d8",
-              4,
-              "#e7b75b",
-              5,
-              "#8eace5",
-              6,
-              "#8dca9a",
-              "#bedc45",
-            ],
+            ["%", ["to-number", ["id"], 0], 7],
+            0,
+            "#bedc45",
+            1,
+            "#e68267",
+            2,
+            "#76c7d0",
+            3,
+            "#d6a7d8",
+            4,
+            "#e7b75b",
+            5,
+            "#8eace5",
+            6,
+            "#8dca9a",
+            "#bedc45",
           ],
           "fill-extrusion-height": [
             "coalesce",
