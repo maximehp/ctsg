@@ -13,9 +13,6 @@ const START_HEIGHT = 320;
 const START_RADIUS = 1630;
 const ORBIT_TURNS = 0.5;
 const METERS_PER_LATITUDE_DEGREE = 111_320;
-
-type MapStatus = "loading" | "launching" | "ready" | "unavailable";
-
 type StyleLayer = {
   id: string;
   type: string;
@@ -49,7 +46,7 @@ function getCameraPosition(progress: number): [number, number] {
 
 export function CampusMap() {
   const containerRef = useRef<HTMLDivElement | null>(null);
-  const [mapStatus, setMapStatus] = useState<MapStatus>("loading");
+  const [mapStatus, setMapStatus] = useState("loading");
 
   useEffect(() => {
     if (!containerRef.current) {
@@ -67,24 +64,6 @@ export function CampusMap() {
       attributionControl: { compact: true },
     });
     let animationFrame: number | undefined;
-    let loaderReleaseTimeout: number | undefined;
-    let hasLaunched = false;
-    const loaderShownAt = performance.now();
-
-    const startExperience = (onReady: () => void) => {
-      if (hasLaunched) {
-        return;
-      }
-
-      hasLaunched = true;
-      loaderReleaseTimeout = window.setTimeout(() => {
-        setMapStatus("launching");
-        loaderReleaseTimeout = window.setTimeout(() => {
-          setMapStatus("ready");
-          onReady();
-        }, 280);
-      }, Math.max(0, 680 - (performance.now() - loaderShownAt)));
-    };
 
     const getCameraView = (progress: number) => {
       const cameraPosition = getCameraPosition(progress);
@@ -98,14 +77,13 @@ export function CampusMap() {
       );
     };
 
-    map.once("style.load", () => {
+    map.on("load", () => {
       const layers = (map.getStyle().layers ?? []) as StyleLayer[];
       const buildingLayer = layers.find(
         (layer) => layer["source-layer"] === "building" && layer.source,
       );
-      const buildingSource = buildingLayer?.source;
 
-      if (!buildingSource) {
+      if (!buildingLayer?.source) {
         setMapStatus("unavailable");
         return;
       }
@@ -127,7 +105,7 @@ export function CampusMap() {
       map.addLayer({
         id: "ct-campus-clay-buildings",
         type: "fill-extrusion",
-        source: buildingSource,
+        source: buildingLayer.source,
         "source-layer": "building",
         minzoom: 13,
         filter: ["!=", ["get", "hide_3d"], true],
@@ -184,15 +162,10 @@ export function CampusMap() {
         "(prefers-reduced-motion: reduce)",
       ).matches;
 
-      map.once("render", () => {
-        if (reducedMotion) {
-          startExperience(() => {
-            map.jumpTo(getCameraView(1));
-          });
-          return;
-        }
-
-        startExperience(() => {
+      if (reducedMotion) {
+        map.jumpTo(getCameraView(1));
+      } else {
+        map.once("idle", () => {
           const startedAt = performance.now();
 
           const animate = (now: number) => {
@@ -206,15 +179,18 @@ export function CampusMap() {
 
           animationFrame = window.requestAnimationFrame(animate);
         });
-      });
+      }
+
+      setMapStatus("ready");
+    });
+
+    map.on("error", () => {
+      setMapStatus("unavailable");
     });
 
     return () => {
       if (animationFrame !== undefined) {
         window.cancelAnimationFrame(animationFrame);
-      }
-      if (loaderReleaseTimeout !== undefined) {
-        window.clearTimeout(loaderReleaseTimeout);
       }
       map.remove();
     };
@@ -223,21 +199,7 @@ export function CampusMap() {
   return (
     <div className="map-wrap">
       <div className="map-canvas" ref={containerRef} />
-      {mapStatus !== "ready" && mapStatus !== "unavailable" && (
-        <div
-          className={`map-loader${mapStatus === "launching" ? " map-loader--releasing" : ""}`}
-          role="status"
-          aria-live="polite"
-        >
-          <div className="map-loader-card">
-            <p className="map-loader-kicker">CTSG / 2026</p>
-            <p className="map-loader-title">LOADING CAMPUS STUDY</p>
-            <div className="map-loader-track" aria-hidden="true">
-              <span className="map-loader-fill" />
-            </div>
-          </div>
-        </div>
-      )}
+      {mapStatus === "loading" && <p className="map-status">LOADING CAMPUS MASSING</p>}
       {mapStatus === "unavailable" && (
         <p className="map-status">MAP DATA UNAVAILABLE</p>
       )}
