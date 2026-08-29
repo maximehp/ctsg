@@ -34,7 +34,8 @@ test("server-renders the CTSG campaign landing page", async () => {
     html,
     /Maxime Hendryx-Parker for Cornell Tech Student Government Technical Co-President\./,
   );
-  assert.match(html, /CTSG \/ TECHNICAL CO-PRESIDENT/);
+  assert.match(html, /MH2682@CORNELL\.EDU/);
+  assert.match(html, /@MAXIMEHP_/);
   assert.match(
     html,
     /<span>MAXIME FOR<\/span><span>TECHNICAL CO-PRESIDENT<\/span>/,

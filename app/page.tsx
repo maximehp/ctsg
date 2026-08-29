@@ -4,11 +4,14 @@ export default function Home() {
   return (
     <main className="campaign-shell">
       <header className="site-header">
-        <a className="wordmark" href="#top" aria-label="Maxime Hendryx-Parker campaign">
-          <span>MAXIME</span>
-          <span>HENDRYX-PARKER</span>
+        <a
+          className="wordmark"
+          href="mailto:mh2682@cornell.edu"
+          aria-label="Email Maxime Hendryx-Parker"
+        >
+          <span>MH2682@CORNELL.EDU</span>
         </a>
-        <p className="role">CTSG / TECHNICAL CO-PRESIDENT</p>
+        <p className="role">@MAXIMEHP_</p>
       </header>
 
       <section
