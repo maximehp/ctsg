@@ -20,11 +20,13 @@ const FINAL_LEFT_YAW = 3;
 const METERS_PER_LATITUDE_DEGREE = 111_320;
 const MAP_STYLE = "https://basemaps.cartocdn.com/gl/positron-gl-style/style.json";
 const PANEL_CONTENT_VERTICAL_SPACE = 54;
+const ACTIVE_TITLE_SAFE_INSET = 8;
 
 type MarkerPosition = {
   x: number;
   y: number;
   panelShiftX: number;
+  panelTitleOffsetX: number;
   horizontal: "left" | "center" | "right";
   vertical: "above" | "below";
 };
@@ -725,9 +727,10 @@ export function CampusMap() {
           const section = CAMPAIGN_SECTIONS[
             SECTION_BUILDING_ORDER.indexOf(index)
           ];
+          const requestedPanelWidth = section?.panelWidth ?? (section?.image ? 300 : 250);
           const expandedPanelWidth = isMobile
-            ? 280
-            : (section?.panelWidth ?? (section?.image ? 300 : 250));
+            ? Math.min(280, viewport.clientWidth - 40)
+            : Math.min(requestedPanelWidth, viewport.clientWidth - 44);
           const footprintCenter = getFootprintCenter(building.geometry.coordinates[0]);
           const point = visibleBuildingCenters?.[index] ?? map.project([
             footprintCenter.lng,
@@ -748,11 +751,24 @@ export function CampusMap() {
               x + expandedPanelWidth / 2 - (viewport.clientWidth - panelEdgeInset),
               0,
             );
+          const activeTitle = `${String(
+            SECTION_BUILDING_ORDER.indexOf(index) + 1,
+          ).padStart(2, "0")} / ${section?.title ?? ""}`;
+          const activeTitleWidth = activeTitle.length * 6 + 20;
+          const maxTitleOffset = Math.max(
+            0,
+            expandedPanelWidth / 2 - activeTitleWidth / 2 - ACTIVE_TITLE_SAFE_INSET,
+          );
+          const panelTitleOffsetX = Math.min(
+            Math.max(-panelShiftX, -maxTitleOffset),
+            maxTitleOffset,
+          );
 
           return {
             x,
             y,
             panelShiftX,
+            panelTitleOffsetX,
             horizontal: point.x < viewport.clientWidth * 0.3
               ? "left"
             : point.x > viewport.clientWidth * 0.7
@@ -1157,7 +1173,7 @@ export function CampusMap() {
                     ? `${panelContentHeights[index]}px`
                     : undefined,
                   "--panel-shift-x": `${position.panelShiftX}px`,
-                  "--panel-title-offset-x": `${-position.panelShiftX}px`,
+                  "--panel-title-offset-x": `${position.panelTitleOffsetX}px`,
                 } as React.CSSProperties}
               >
                 <section
