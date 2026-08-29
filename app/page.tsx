@@ -11,22 +11,25 @@ export default function Home() {
         <p className="role">CTSG / TECHNICAL CO-PRESIDENT</p>
       </header>
 
-      <section className="campus-study" id="top" aria-label="Cornell Tech campus study">
+      <section
+        className="campus-study"
+        id="top"
+        aria-label="2026 Cornell Tech Student Government campaign"
+      >
         <CampusMap />
 
         <div className="study-frame" aria-hidden="true" />
 
         <div className="study-title">
-          <p>01 / CAMPUS STUDY</p>
           <h1>
-            CORNELL<br />
-            TECH
+            <span>MAXIME FOR</span>
+            <span>TECHNICAL CO-PRESIDENT</span>
           </h1>
         </div>
 
         <div className="study-meta">
           <p>ROOSEVELT ISLAND, NYC</p>
-          <p>CAMPAIGN SITE / IN FORMATION</p>
+          <p>UNITED STATES</p>
         </div>
 
         <div className="coordinate-mark" aria-hidden="true">
@@ -36,8 +39,15 @@ export default function Home() {
       </section>
 
       <footer className="study-footer">
-        <span>VISUAL DIRECTION ONLY</span>
-        <span>2026</span>
+        <span>CORNELL TECH / 2026</span>
+        <a
+          className="footer-attribution"
+          href="https://www.openstreetmap.org/copyright"
+          target="_blank"
+          rel="noreferrer"
+        >
+          © OpenStreetMap contributors © CARTO
+        </a>
       </footer>
     </main>
   );

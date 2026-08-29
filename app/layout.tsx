@@ -14,7 +14,8 @@ const geistMono = Geist_Mono({
 
 export const metadata: Metadata = {
   title: "Maxime Hendryx-Parker | CTSG",
-  description: "Campaign site study for Cornell Tech Student Government.",
+  description:
+    "Maxime Hendryx-Parker for Cornell Tech Student Government Technical Co-President.",
   icons: {
     icon: "/favicon.svg",
     shortcut: "/favicon.svg",
