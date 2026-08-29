@@ -100,8 +100,9 @@ export function CampusMap() {
       const buildingLayer = layers.find(
         (layer) => layer["source-layer"] === "building" && layer.source,
       );
+      const buildingSource = buildingLayer?.source;
 
-      if (!buildingLayer?.source) {
+      if (!buildingSource) {
         setMapStatus("unavailable");
         return;
       }
@@ -123,7 +124,7 @@ export function CampusMap() {
       map.addLayer({
         id: "ct-campus-clay-buildings",
         type: "fill-extrusion",
-        source: buildingLayer.source,
+        source: buildingSource,
         "source-layer": "building",
         minzoom: 13,
         filter: ["!=", ["get", "hide_3d"], true],
@@ -180,7 +181,18 @@ export function CampusMap() {
         "(prefers-reduced-motion: reduce)",
       ).matches;
 
-      map.once("idle", () => {
+      const startWhenCampusBuildingsAreReady = () => {
+        const hasBuildingGeometry =
+          map.querySourceFeatures(buildingSource, {
+            sourceLayer: "building",
+          }).length > 0;
+
+        if (!hasBuildingGeometry || hasLaunched) {
+          return;
+        }
+
+        map.off("sourcedata", startWhenCampusBuildingsAreReady);
+
         if (reducedMotion) {
           startExperience(() => {
             map.jumpTo(getCameraView(1));
@@ -202,7 +214,10 @@ export function CampusMap() {
 
           animationFrame = window.requestAnimationFrame(animate);
         });
-      });
+      };
+
+      map.on("sourcedata", startWhenCampusBuildingsAreReady);
+      startWhenCampusBuildingsAreReady();
     });
 
     return () => {
