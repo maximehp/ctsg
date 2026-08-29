@@ -11,7 +11,15 @@ export default function Home() {
         >
           <span>MH2682@CORNELL.EDU</span>
         </a>
-        <p className="role">@MAXIMEHP_</p>
+        <a
+          className="role"
+          href="https://www.instagram.com/maximehp_/"
+          target="_blank"
+          rel="noreferrer"
+          aria-label="Follow Maxime Hendryx-Parker on Instagram"
+        >
+          @MAXIMEHP_
+        </a>
       </header>
 
       <section

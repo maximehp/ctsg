@@ -36,6 +36,7 @@ test("server-renders the CTSG campaign landing page", async () => {
   );
   assert.match(html, /MH2682@CORNELL\.EDU/);
   assert.match(html, /@MAXIMEHP_/);
+  assert.match(html, /https:\/\/www\.instagram\.com\/maximehp_\//);
   assert.match(
     html,
     /<span>MAXIME FOR<\/span><span>TECHNICAL CO-PRESIDENT<\/span>/,
