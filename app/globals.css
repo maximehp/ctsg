@@ -94,6 +94,28 @@ a {
   inset: 0;
 }
 
+.map-snapshot {
+  position: absolute;
+  z-index: 1;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  object-fit: fill;
+  pointer-events: none;
+}
+
+.map-attribution {
+  position: absolute;
+  z-index: 2;
+  right: 0;
+  bottom: 0;
+  padding: 3px 5px;
+  background: rgba(247, 246, 239, 0.75);
+  color: var(--ink);
+  font-size: 9px;
+  line-height: 1;
+}
+
 .map-canvas .maplibregl-canvas {
   outline: none;
 }
@@ -225,6 +247,146 @@ a {
   transform: translate(-50%, -50%);
 }
 
+.building-tour {
+  position: absolute;
+  z-index: 50;
+  inset: 0;
+  pointer-events: none;
+}
+
+.building-marker {
+  position: absolute;
+  z-index: 50;
+  width: 28px;
+  height: 28px;
+  pointer-events: auto;
+  opacity: 0;
+  transform: translate(-50%, -50%) scale(0.7);
+  animation: marker-appear 260ms cubic-bezier(0.2, 0.8, 0.2, 1) forwards;
+  animation-delay: var(--marker-delay);
+}
+
+.building-marker--active {
+  z-index: 100;
+}
+
+.building-marker__surface {
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 28px;
+  height: 28px;
+  overflow: hidden;
+  border: 1px solid rgba(247, 246, 239, 0.92);
+  border-radius: 50%;
+  background: rgba(18, 20, 18, 0.96);
+  box-shadow: 0 0 0 4px rgba(18, 20, 18, 0.32);
+  transition:
+    width 150ms cubic-bezier(0.2, 0.8, 0.2, 1),
+    height 180ms cubic-bezier(0.2, 0.8, 0.2, 1) 150ms,
+    border-radius 150ms ease,
+    box-shadow 180ms ease;
+}
+
+.building-marker--active .building-marker__surface {
+  width: min(248px, calc(100vw - 44px));
+  height: 166px;
+  border-radius: 0;
+  box-shadow: 6px 6px 0 var(--acid);
+}
+
+.building-marker--right .building-marker__surface {
+  right: 0;
+  left: auto;
+}
+
+.building-marker--above .building-marker__surface {
+  top: auto;
+  bottom: 0;
+}
+
+.building-marker__button {
+  position: absolute;
+  z-index: 1;
+  top: -1px;
+  left: -1px;
+  display: grid;
+  width: 28px;
+  height: 28px;
+  padding: 0;
+  place-items: center;
+  border: 0;
+  background: transparent;
+  color: var(--acid);
+  cursor: pointer;
+  font-family: Georgia, "Times New Roman", serif;
+  font-size: 17px;
+  font-style: italic;
+  font-weight: 700;
+  line-height: 1;
+  transition: background-color 140ms ease, color 140ms ease, transform 140ms ease;
+}
+
+.building-marker:not(.building-marker--active) .building-marker__button:hover {
+  background: var(--acid);
+  color: var(--ink);
+  transform: scale(1.08);
+}
+
+.building-marker__button:focus-visible,
+.building-marker__next:focus-visible {
+  outline: 2px solid var(--acid);
+  outline-offset: 3px;
+}
+
+.building-marker__next {
+  font-family: var(--font-geist-mono), monospace;
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  line-height: 1.2;
+}
+
+.building-marker__next {
+  position: absolute;
+  right: 16px;
+  bottom: 16px;
+  left: 16px;
+  display: flex;
+  width: calc(100% - 32px);
+  padding: 10px 0 0;
+  align-items: center;
+  justify-content: space-between;
+  border: 0;
+  border-top: 1px solid rgba(247, 246, 239, 0.5);
+  background: transparent;
+  color: var(--paper);
+  cursor: pointer;
+  text-align: left;
+  opacity: 0;
+  pointer-events: none;
+  transform: translateY(8px);
+  transition: opacity 120ms ease, transform 120ms ease, color 140ms ease;
+}
+
+.building-marker--active .building-marker__next {
+  opacity: 1;
+  pointer-events: auto;
+  transform: translateY(0);
+  transition-delay: 300ms, 300ms, 0ms;
+}
+
+.building-marker__next:hover {
+  color: var(--acid);
+}
+
+@keyframes marker-appear {
+  to {
+    opacity: 1;
+    transform: translate(-50%, -50%) scale(1);
+  }
+}
+
 .study-footer {
   min-height: 44px;
   border-width: 1px 0 0;
@@ -266,5 +428,21 @@ a {
 
   .loading-screen__track {
     height: 22px;
+  }
+
+  .building-marker--active .building-marker__surface {
+    width: min(220px, calc(100vw - 40px));
+    height: 148px;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .building-marker {
+    animation: none;
+  }
+
+  .building-marker {
+    opacity: 1;
+    transform: translate(-50%, -50%);
   }
 }

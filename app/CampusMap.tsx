@@ -18,6 +18,38 @@ const ORBIT_TURNS = 0.5;
 const FINAL_LEFT_YAW = 3;
 const METERS_PER_LATITUDE_DEGREE = 111_320;
 const MAP_STYLE = "https://basemaps.cartocdn.com/gl/positron-gl-style/style.json";
+
+type CampusStop = {
+  coordinates: [number, number];
+  offset: [number, number];
+};
+
+type MarkerPosition = {
+  x: number;
+  y: number;
+  horizontal: "left" | "center" | "right";
+  vertical: "above" | "below";
+};
+
+const CAMPUS_STOPS: CampusStop[] = [
+  {
+    coordinates: [-73.95622, 40.75569],
+    offset: [0, -58],
+  },
+  {
+    coordinates: [-73.9554, 40.75524],
+    offset: [0, 152],
+  },
+  {
+    coordinates: [-73.95486, 40.75577],
+    offset: [0, -115],
+  },
+  {
+    coordinates: [-73.95548, 40.75622],
+    offset: [-110, -40],
+  },
+];
+
 type StyleLayer = {
   id: string;
   type: string;
@@ -168,7 +200,13 @@ function getYawAdjustedTarget(
 
 export function CampusMap() {
   const containerRef = useRef<HTMLDivElement | null>(null);
+  const initialPanelTimeoutRef = useRef<number | undefined>(undefined);
+  const snapshotUrlRef = useRef<string | undefined>(undefined);
   const [mapStatus, setMapStatus] = useState("loading");
+  const [isTourVisible, setIsTourVisible] = useState(false);
+  const [activeStop, setActiveStop] = useState<number | null>(null);
+  const [markerPositions, setMarkerPositions] = useState<MarkerPosition[]>([]);
+  const [staticMapUrl, setStaticMapUrl] = useState<string | null>(null);
   const [loadingScreenPhase, setLoadingScreenPhase] = useState<
     "visible" | "leaving" | "hidden"
   >("visible");
@@ -207,9 +245,12 @@ export function CampusMap() {
       centerClampedToGround: false,
       interactive: false,
       attributionControl: { compact: true },
+      preserveDrawingBuffer: true,
     });
     let animationFrame: number | undefined;
     let cameraStartTimeout: number | undefined;
+    let mapRemoved = false;
+    let isDisposed = false;
 
     const getCameraView = (progress: number) => {
       const cameraPosition = getCameraPosition(progress);
@@ -225,6 +266,101 @@ export function CampusMap() {
         lookAtTarget,
         LOOK_AT_HEIGHT,
       );
+    };
+
+    const updateMarkerPositions = () => {
+      const canvas = map.getCanvas();
+      const isMobile = window.matchMedia("(max-width: 640px)").matches;
+      const horizontalInset = isMobile ? 28 : 0;
+      const verticalInset = isMobile ? 58 : 0;
+
+      setMarkerPositions(
+        CAMPUS_STOPS.map((stop) => {
+          const point = map.project(stop.coordinates);
+          // The map projection is calculated at ground level, while the campus
+          // buildings are deliberately extruded. These scale with the viewport
+          // so each marker stays on the visible face of its building.
+          const offsetX = stop.offset[0] * (canvas.clientWidth / 2048);
+          const offsetY = stop.offset[1] * (canvas.clientHeight / 1024);
+          const x = Math.min(
+            Math.max(point.x + offsetX, horizontalInset),
+            canvas.clientWidth - horizontalInset,
+          );
+          const y = Math.min(
+            Math.max(point.y + offsetY, verticalInset),
+            canvas.clientHeight - verticalInset,
+          );
+
+          return {
+            x,
+            y,
+            horizontal: x < canvas.clientWidth * 0.3
+              ? "left"
+              : x > canvas.clientWidth * 0.7
+                ? "right"
+                : "center",
+            vertical: y > canvas.clientHeight * 0.62 ? "above" : "below",
+          };
+        }),
+      );
+    };
+
+    const removeMap = () => {
+      if (mapRemoved) {
+        return;
+      }
+
+      map.off("resize", updateMarkerPositions);
+      map.remove();
+      mapRemoved = true;
+    };
+
+    const freezeMap = () => {
+      if (isDisposed || mapRemoved) {
+        return;
+      }
+
+      updateMarkerPositions();
+
+      try {
+        map.getCanvas().toBlob((snapshot) => {
+          if (isDisposed || !snapshot) {
+            return;
+          }
+
+          const url = URL.createObjectURL(snapshot);
+          const image = new Image();
+          image.onload = () => {
+            if (isDisposed) {
+              URL.revokeObjectURL(url);
+              return;
+            }
+
+            snapshotUrlRef.current = url;
+            setStaticMapUrl(url);
+            window.requestAnimationFrame(removeMap);
+          };
+          image.onerror = () => URL.revokeObjectURL(url);
+          image.src = url;
+        }, "image/webp", 0.92);
+      } catch {
+        // Keep the live map visible if a browser blocks canvas snapshots.
+      }
+    };
+
+    const revealTour = () => {
+      window.requestAnimationFrame(() => {
+        updateMarkerPositions();
+        setIsTourVisible(true);
+        initialPanelTimeoutRef.current = window.setTimeout(() => {
+          setActiveStop(0);
+          initialPanelTimeoutRef.current = undefined;
+        }, 260);
+      });
+    };
+
+    const finishIntro = () => {
+      revealTour();
     };
 
     map.on("style.load", () => {
@@ -376,21 +512,31 @@ export function CampusMap() {
         "(prefers-reduced-motion: reduce)",
       ).matches;
 
+      map.on("resize", updateMarkerPositions);
+
       // `idle` means the style, source data, and layers have settled. Waiting
       // here prevents an unfinished map frame from appearing before the intro.
       map.once("idle", () => {
         cameraStartTimeout = window.setTimeout(() => {
           if (reducedMotion) {
+            map.once("render", freezeMap);
             map.jumpTo(getCameraView(1));
+            finishIntro();
           } else {
             const startedAt = performance.now();
 
             const animate = (now: number) => {
               const progress = Math.min((now - startedAt) / CAMERA_DURATION, 1);
-              map.jumpTo(getCameraView(easeOut(progress)));
-
               if (progress < 1) {
+                map.jumpTo(getCameraView(easeOut(progress)));
                 animationFrame = window.requestAnimationFrame(animate);
+              } else {
+                // Capture during the final render itself. Waiting for a later
+                // frame lets WebGL clear its drawing buffer on some browsers,
+                // which produced an empty light-blue snapshot.
+                map.once("render", freezeMap);
+                map.jumpTo(getCameraView(1));
+                finishIntro();
               }
             };
 
@@ -407,19 +553,89 @@ export function CampusMap() {
     });
 
     return () => {
+      isDisposed = true;
       if (animationFrame !== undefined) {
         window.cancelAnimationFrame(animationFrame);
       }
       if (cameraStartTimeout !== undefined) {
         window.clearTimeout(cameraStartTimeout);
       }
-      map.remove();
+      if (initialPanelTimeoutRef.current !== undefined) {
+        window.clearTimeout(initialPanelTimeoutRef.current);
+      }
+      if (snapshotUrlRef.current !== undefined) {
+        URL.revokeObjectURL(snapshotUrlRef.current);
+      }
+      removeMap();
     };
   }, []);
 
   return (
     <div className="map-wrap">
       <div className="map-canvas" ref={containerRef} />
+      {staticMapUrl !== null && (
+        <>
+          <img className="map-snapshot" src={staticMapUrl} alt="" />
+          <a
+            className="map-attribution"
+            href="https://www.openstreetmap.org/copyright"
+            target="_blank"
+            rel="noreferrer"
+          >
+            © OpenStreetMap contributors © CARTO
+          </a>
+        </>
+      )}
+      {isTourVisible && markerPositions.length === CAMPUS_STOPS.length && (
+        <div className="building-tour" aria-label="Campus priorities">
+          {CAMPUS_STOPS.map((stop, index) => {
+            const position = markerPositions[index];
+            const isActive = activeStop === index;
+
+            const activateStop = () => {
+              if (initialPanelTimeoutRef.current !== undefined) {
+                window.clearTimeout(initialPanelTimeoutRef.current);
+                initialPanelTimeoutRef.current = undefined;
+              }
+              setActiveStop(index);
+            };
+
+            return (
+              <div
+                className={`building-marker building-marker--${position.horizontal} building-marker--${position.vertical}${isActive ? " building-marker--active" : ""}`}
+                key={index}
+                style={{
+                  left: `${position.x}px`,
+                  top: `${position.y}px`,
+                  "--marker-delay": `${index * 70}ms`,
+                } as React.CSSProperties}
+              >
+                <section className="building-marker__surface" aria-label="Information panel">
+                  <button
+                    className="building-marker__button"
+                    type="button"
+                    aria-label={`Open campus point ${index + 1}`}
+                    aria-pressed={isActive}
+                    onClick={activateStop}
+                  >
+                    <span aria-hidden="true">i</span>
+                  </button>
+                    <button
+                      className="building-marker__next"
+                      type="button"
+                      onClick={() => setActiveStop((index + 1) % CAMPUS_STOPS.length)}
+                      aria-label="Open next campus point"
+                      tabIndex={isActive ? 0 : -1}
+                    >
+                      <span>NEXT</span>
+                      <span aria-hidden="true">→</span>
+                    </button>
+                </section>
+              </div>
+            );
+          })}
+        </div>
+      )}
       {loadingScreenPhase !== "hidden" && (
         <div
           className={`loading-screen loading-screen--${loadingScreenPhase}`}
