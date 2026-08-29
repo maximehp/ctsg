@@ -184,6 +184,7 @@ a {
 
 .study-frame {
   position: absolute;
+  z-index: 3;
   inset: 18px;
   pointer-events: none;
   border: 1px solid rgba(18, 20, 18, 0.7);
@@ -193,7 +194,7 @@ a {
 .study-meta,
 .coordinate-mark {
   position: absolute;
-  z-index: 1;
+  z-index: 3;
   pointer-events: none;
 }
 
