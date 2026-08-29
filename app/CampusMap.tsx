@@ -8,6 +8,7 @@ const CAMERA_TARGET: [number, number] = [-73.9571674, 40.7545844];
 const LOOK_AT_TARGET: [number, number] = [-73.9550837, 40.7559414];
 
 const CAMERA_DURATION = 9000;
+const LOADING_HOLD_DURATION = 250;
 const EYE_HEIGHT = 1.7;
 const LOOK_AT_HEIGHT = 35;
 const START_HEIGHT = 320;
@@ -112,6 +113,7 @@ export function CampusMap() {
       attributionControl: { compact: true },
     });
     let animationFrame: number | undefined;
+    let cameraStartTimeout: number | undefined;
 
     const getCameraView = (progress: number) => {
       const cameraPosition = getCameraPosition(progress);
@@ -262,24 +264,26 @@ export function CampusMap() {
       // `idle` means the style, source data, and layers have settled. Waiting
       // here prevents an unfinished map frame from appearing before the intro.
       map.once("idle", () => {
-        if (reducedMotion) {
-          map.jumpTo(getCameraView(1));
-        } else {
-          const startedAt = performance.now();
+        cameraStartTimeout = window.setTimeout(() => {
+          if (reducedMotion) {
+            map.jumpTo(getCameraView(1));
+          } else {
+            const startedAt = performance.now();
 
-          const animate = (now: number) => {
-            const progress = Math.min((now - startedAt) / CAMERA_DURATION, 1);
-            map.jumpTo(getCameraView(easeOut(progress)));
+            const animate = (now: number) => {
+              const progress = Math.min((now - startedAt) / CAMERA_DURATION, 1);
+              map.jumpTo(getCameraView(easeOut(progress)));
 
-            if (progress < 1) {
-              animationFrame = window.requestAnimationFrame(animate);
-            }
-          };
+              if (progress < 1) {
+                animationFrame = window.requestAnimationFrame(animate);
+              }
+            };
 
-          animationFrame = window.requestAnimationFrame(animate);
-        }
+            animationFrame = window.requestAnimationFrame(animate);
+          }
 
-        setMapStatus("ready");
+          setMapStatus("ready");
+        }, LOADING_HOLD_DURATION);
       });
     });
 
@@ -290,6 +294,9 @@ export function CampusMap() {
     return () => {
       if (animationFrame !== undefined) {
         window.cancelAnimationFrame(animationFrame);
+      }
+      if (cameraStartTimeout !== undefined) {
+        window.clearTimeout(cameraStartTimeout);
       }
       map.remove();
     };
