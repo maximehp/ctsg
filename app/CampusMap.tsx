@@ -69,12 +69,6 @@ export function CampusMap() {
     let animationFrame: number | undefined;
     let loaderReleaseTimeout: number | undefined;
     let hasLaunched = false;
-    const loaderShownAt = performance.now();
-    const startupTimeout = window.setTimeout(() => {
-      if (!hasLaunched) {
-        setMapStatus("unavailable");
-      }
-    }, 12_000);
 
     const startExperience = (onReady: () => void) => {
       if (hasLaunched) {
@@ -82,14 +76,11 @@ export function CampusMap() {
       }
 
       hasLaunched = true;
-      window.clearTimeout(startupTimeout);
+      setMapStatus("launching");
       loaderReleaseTimeout = window.setTimeout(() => {
-        setMapStatus("launching");
-        loaderReleaseTimeout = window.setTimeout(() => {
-          setMapStatus("ready");
-          onReady();
-        }, 280);
-      }, Math.max(0, 680 - (performance.now() - loaderShownAt)));
+        setMapStatus("ready");
+        onReady();
+      }, 280);
     };
 
     const getCameraView = (progress: number) => {
@@ -111,7 +102,6 @@ export function CampusMap() {
       );
 
       if (!buildingLayer?.source) {
-        window.clearTimeout(startupTimeout);
         setMapStatus("unavailable");
         return;
       }
@@ -190,11 +180,14 @@ export function CampusMap() {
         "(prefers-reduced-motion: reduce)",
       ).matches;
 
-      if (reducedMotion) {
-        startExperience(() => {
-          map.jumpTo(getCameraView(1));
-        });
-      } else {
+      map.once("idle", () => {
+        if (reducedMotion) {
+          startExperience(() => {
+            map.jumpTo(getCameraView(1));
+          });
+          return;
+        }
+
         startExperience(() => {
           const startedAt = performance.now();
 
@@ -209,14 +202,13 @@ export function CampusMap() {
 
           animationFrame = window.requestAnimationFrame(animate);
         });
-      }
+      });
     });
 
     return () => {
       if (animationFrame !== undefined) {
         window.cancelAnimationFrame(animationFrame);
       }
-      window.clearTimeout(startupTimeout);
       if (loaderReleaseTimeout !== undefined) {
         window.clearTimeout(loaderReleaseTimeout);
       }
