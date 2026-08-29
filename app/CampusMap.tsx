@@ -200,6 +200,9 @@ function getYawAdjustedTarget(
 
 export function CampusMap() {
   const containerRef = useRef<HTMLDivElement | null>(null);
+  const snapshotRef = useRef<HTMLImageElement | null>(null);
+  const removeMapRef = useRef<(() => void) | null>(null);
+  const snapshotHandoffScheduledRef = useRef(false);
   const initialPanelTimeoutRef = useRef<number | undefined>(undefined);
   const snapshotUrlRef = useRef<string | undefined>(undefined);
   const [mapStatus, setMapStatus] = useState("loading");
@@ -314,6 +317,7 @@ export function CampusMap() {
       map.remove();
       mapRemoved = true;
     };
+    removeMapRef.current = removeMap;
 
     const freezeMap = () => {
       if (isDisposed || mapRemoved) {
@@ -329,19 +333,8 @@ export function CampusMap() {
           }
 
           const url = URL.createObjectURL(snapshot);
-          const image = new Image();
-          image.onload = () => {
-            if (isDisposed) {
-              URL.revokeObjectURL(url);
-              return;
-            }
-
-            snapshotUrlRef.current = url;
-            setStaticMapUrl(url);
-            window.requestAnimationFrame(removeMap);
-          };
-          image.onerror = () => URL.revokeObjectURL(url);
-          image.src = url;
+          snapshotUrlRef.current = url;
+          setStaticMapUrl(url);
         }, "image/webp", 0.92);
       } catch {
         // Keep the live map visible if a browser blocks canvas snapshots.
@@ -566,16 +559,46 @@ export function CampusMap() {
       if (snapshotUrlRef.current !== undefined) {
         URL.revokeObjectURL(snapshotUrlRef.current);
       }
+      removeMapRef.current = null;
       removeMap();
     };
   }, []);
+
+  const handleSnapshotLoad = () => {
+    if (snapshotHandoffScheduledRef.current) {
+      return;
+    }
+
+    snapshotHandoffScheduledRef.current = true;
+    const removeAfterSnapshotPaints = () => {
+      // The first frame commits the loaded image above the live canvas; the
+      // second confirms it has painted before releasing MapLibre's WebGL state.
+      window.requestAnimationFrame(() => {
+        window.requestAnimationFrame(() => removeMapRef.current?.());
+      });
+    };
+    const snapshot = snapshotRef.current;
+
+    if (snapshot && "decode" in snapshot) {
+      void snapshot.decode().catch(() => undefined).then(removeAfterSnapshotPaints);
+      return;
+    }
+
+    removeAfterSnapshotPaints();
+  };
 
   return (
     <div className="map-wrap">
       <div className="map-canvas" ref={containerRef} />
       {staticMapUrl !== null && (
         <>
-          <img className="map-snapshot" src={staticMapUrl} alt="" />
+          <img
+            className="map-snapshot"
+            ref={snapshotRef}
+            src={staticMapUrl}
+            alt=""
+            onLoad={handleSnapshotLoad}
+          />
           <a
             className="map-attribution"
             href="https://www.openstreetmap.org/copyright"
