@@ -69,6 +69,7 @@ export function CampusMap() {
     let animationFrame: number | undefined;
     let loaderReleaseTimeout: number | undefined;
     let hasLaunched = false;
+    const loaderShownAt = performance.now();
 
     const startExperience = (onReady: () => void) => {
       if (hasLaunched) {
@@ -76,11 +77,13 @@ export function CampusMap() {
       }
 
       hasLaunched = true;
-      setMapStatus("launching");
       loaderReleaseTimeout = window.setTimeout(() => {
-        setMapStatus("ready");
-        onReady();
-      }, 280);
+        setMapStatus("launching");
+        loaderReleaseTimeout = window.setTimeout(() => {
+          setMapStatus("ready");
+          onReady();
+        }, 280);
+      }, Math.max(0, 680 - (performance.now() - loaderShownAt)));
     };
 
     const getCameraView = (progress: number) => {
@@ -181,18 +184,7 @@ export function CampusMap() {
         "(prefers-reduced-motion: reduce)",
       ).matches;
 
-      const startWhenCampusBuildingsAreReady = () => {
-        const hasBuildingGeometry =
-          map.querySourceFeatures(buildingSource, {
-            sourceLayer: "building",
-          }).length > 0;
-
-        if (!hasBuildingGeometry || hasLaunched) {
-          return;
-        }
-
-        map.off("sourcedata", startWhenCampusBuildingsAreReady);
-
+      map.once("render", () => {
         if (reducedMotion) {
           startExperience(() => {
             map.jumpTo(getCameraView(1));
@@ -214,10 +206,7 @@ export function CampusMap() {
 
           animationFrame = window.requestAnimationFrame(animate);
         });
-      };
-
-      map.on("sourcedata", startWhenCampusBuildingsAreReady);
-      startWhenCampusBuildingsAreReady();
+      });
     });
 
     return () => {
