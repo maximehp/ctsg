@@ -13,6 +13,7 @@ const LOOK_AT_HEIGHT = 35;
 const START_HEIGHT = 320;
 const START_RADIUS = 1630;
 const ORBIT_TURNS = 0.5;
+const FINAL_LEFT_YAW = 3;
 const METERS_PER_LATITUDE_DEGREE = 111_320;
 const MAP_STYLE = "https://basemaps.cartocdn.com/gl/positron-gl-style/style.json";
 type StyleLayer = {
@@ -29,15 +30,14 @@ function easeOut(progress: number) {
 function getCameraPosition(progress: number): [number, number] {
   const metersPerLongitudeDegree =
     METERS_PER_LATITUDE_DEGREE * Math.cos((LOOK_AT_TARGET[1] * Math.PI) / 180);
-  const endEast =
+  const finalEast =
     (CAMERA_TARGET[0] - LOOK_AT_TARGET[0]) * metersPerLongitudeDegree;
-  const endNorth =
+  const finalNorth =
     (CAMERA_TARGET[1] - LOOK_AT_TARGET[1]) * METERS_PER_LATITUDE_DEGREE;
-  const endRadius = Math.hypot(endEast, endNorth);
-  const endAngle = Math.atan2(endNorth, endEast);
+  const endRadius = Math.hypot(finalEast, finalNorth);
+  const endAngle = Math.atan2(finalNorth, finalEast);
   const radius = START_RADIUS + (endRadius - START_RADIUS) * progress;
   const angle = endAngle - (1 - progress) * ORBIT_TURNS * Math.PI * 2;
-
   return [
     LOOK_AT_TARGET[0] +
       (Math.cos(angle) * radius) / metersPerLongitudeDegree,
@@ -46,9 +46,53 @@ function getCameraPosition(progress: number): [number, number] {
   ];
 }
 
+function getYawAdjustedTarget(
+  cameraPosition: [number, number],
+  leftYaw: number,
+): [number, number] {
+  const metersPerLongitudeDegree =
+    METERS_PER_LATITUDE_DEGREE *
+    Math.cos((cameraPosition[1] * Math.PI) / 180);
+  const east =
+    (LOOK_AT_TARGET[0] - cameraPosition[0]) * metersPerLongitudeDegree;
+  const north =
+    (LOOK_AT_TARGET[1] - cameraPosition[1]) * METERS_PER_LATITUDE_DEGREE;
+  const yawRadians = (leftYaw * Math.PI) / 180;
+  const adjustedEast =
+    east * Math.cos(yawRadians) - north * Math.sin(yawRadians);
+  const adjustedNorth =
+    east * Math.sin(yawRadians) + north * Math.cos(yawRadians);
+
+  return [
+    cameraPosition[0] + adjustedEast / metersPerLongitudeDegree,
+    cameraPosition[1] + adjustedNorth / METERS_PER_LATITUDE_DEGREE,
+  ];
+}
+
 export function CampusMap() {
   const containerRef = useRef<HTMLDivElement | null>(null);
   const [mapStatus, setMapStatus] = useState("loading");
+  const [loadingScreenPhase, setLoadingScreenPhase] = useState<
+    "visible" | "leaving" | "hidden"
+  >("visible");
+
+  useEffect(() => {
+    if (mapStatus === "unavailable") {
+      setLoadingScreenPhase("hidden");
+      return;
+    }
+
+    if (mapStatus !== "ready") {
+      return;
+    }
+
+    setLoadingScreenPhase("leaving");
+    const timeout = window.setTimeout(() => {
+      setLoadingScreenPhase("hidden");
+    }, 420);
+
+    return () => window.clearTimeout(timeout);
+  }, [mapStatus]);
 
   useEffect(() => {
     if (!containerRef.current) {
@@ -72,11 +116,15 @@ export function CampusMap() {
     const getCameraView = (progress: number) => {
       const cameraPosition = getCameraPosition(progress);
       const eyeHeight = START_HEIGHT + (EYE_HEIGHT - START_HEIGHT) * progress;
+      const lookAtTarget = getYawAdjustedTarget(
+        cameraPosition,
+        FINAL_LEFT_YAW * progress,
+      );
 
       return map.calculateCameraOptionsFromTo(
         cameraPosition,
         eyeHeight,
-        LOOK_AT_TARGET,
+        lookAtTarget,
         LOOK_AT_HEIGHT,
       );
     };
@@ -211,7 +259,9 @@ export function CampusMap() {
         "(prefers-reduced-motion: reduce)",
       ).matches;
 
-      map.once("render", () => {
+      // `idle` means the style, source data, and layers have settled. Waiting
+      // here prevents an unfinished map frame from appearing before the intro.
+      map.once("idle", () => {
         if (reducedMotion) {
           map.jumpTo(getCameraView(1));
         } else {
@@ -248,7 +298,20 @@ export function CampusMap() {
   return (
     <div className="map-wrap">
       <div className="map-canvas" ref={containerRef} />
-      {mapStatus === "loading" && <p className="map-status">LOADING CAMPUS MASSING</p>}
+      {loadingScreenPhase !== "hidden" && (
+        <div
+          className={`loading-screen loading-screen--${loadingScreenPhase}`}
+          aria-live="polite"
+          aria-label="Loading campus world"
+        >
+          <div className="loading-screen__content">
+            <p>LOADING WORLD</p>
+            <div className="loading-screen__track" aria-hidden="true">
+              <span className="loading-screen__bar" />
+            </div>
+          </div>
+        </div>
+      )}
       {mapStatus === "unavailable" && (
         <p className="map-status">MAP DATA UNAVAILABLE</p>
       )}
