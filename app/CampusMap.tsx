@@ -990,50 +990,44 @@ export function CampusMap() {
       return;
     }
 
-    const nextButton = content.querySelector<HTMLElement>(
-      ".building-marker__next",
-    );
-    const surface = content.closest<HTMLElement>(".building-marker__surface");
-    const section = CAMPAIGN_SECTIONS[SECTION_BUILDING_ORDER.indexOf(index)];
-    const requestedWidth = section.panelWidth ?? (section.image ? 300 : 250);
-    const expandedWidth = window.matchMedia("(max-width: 640px)").matches
-      ? Math.min(280, window.innerWidth - 40)
-      : Math.min(requestedWidth, window.innerWidth - 44);
-    const contentTransition = content.style.transition;
-    const contentTransform = content.style.transform;
-    const nextTransition = nextButton?.style.transition ?? "";
-    const nextTransform = nextButton?.style.transform ?? "";
-    const surfaceTransition = surface?.style.transition ?? "";
-    const surfaceWidth = surface?.style.width ?? "";
-
-    // Closed panels offset their hidden content for the entrance animation.
-    // Neutralize those transforms only while measuring so the stored height
-    // matches the fully open panel, then restore them before the frame paints.
-    content.style.transition = "none";
-    content.style.transform = "translateY(0)";
-    if (nextButton) {
-      nextButton.style.transition = "none";
-      nextButton.style.transform = "translateY(0)";
-    }
-    if (surface) {
-      surface.style.transition = "none";
-      surface.style.width = `${expandedWidth}px`;
+    const marker = content.closest<HTMLElement>(".building-marker");
+    if (!marker) {
+      return;
     }
 
+    // Measure an off-screen copy with the active-panel styles applied. The
+    // visible surface is never resized or stripped of its transition, so its
+    // opening animation can run uninterrupted.
+    const measurementRoot = document.createElement("div");
+    measurementRoot.className = `${marker.className} building-marker--active`;
+    measurementRoot.setAttribute("aria-hidden", "true");
+    measurementRoot.style.cssText = marker.style.cssText;
+    measurementRoot.style.position = "fixed";
+    measurementRoot.style.top = "0";
+    measurementRoot.style.left = "-10000px";
+    measurementRoot.style.opacity = "0";
+    measurementRoot.style.pointerEvents = "none";
+    measurementRoot.style.visibility = "hidden";
+    measurementRoot.style.animation = "none";
+    measurementRoot.style.transform = "none";
+
+    const contentCopy = content.cloneNode(true) as HTMLDivElement;
+    contentCopy.style.position = "fixed";
+    contentCopy.style.inset = "auto";
+    contentCopy.style.top = "0";
+    contentCopy.style.left = "-10000px";
+    contentCopy.style.width = `${content.getBoundingClientRect().width}px`;
+    contentCopy.style.height = "auto";
+    contentCopy.style.opacity = "0";
+    contentCopy.style.transition = "none";
+    contentCopy.style.transform = "none";
+
+    measurementRoot.appendChild(contentCopy);
+    document.body.appendChild(measurementRoot);
     const height = Math.ceil(
-      content.getBoundingClientRect().height + PANEL_CONTENT_VERTICAL_SPACE,
+      contentCopy.getBoundingClientRect().height + PANEL_CONTENT_VERTICAL_SPACE,
     );
-
-    content.style.transition = contentTransition;
-    content.style.transform = contentTransform;
-    if (nextButton) {
-      nextButton.style.transition = nextTransition;
-      nextButton.style.transform = nextTransform;
-    }
-    if (surface) {
-      surface.style.transition = surfaceTransition;
-      surface.style.width = surfaceWidth;
-    }
+    measurementRoot.remove();
 
     setPanelContentHeights((current) =>
       current[index] === height ? current : { ...current, [index]: height },
@@ -1046,7 +1040,6 @@ export function CampusMap() {
       // so its exact height is available before the opening transition starts.
       measurePanelHeight(index);
       setActiveStop(index);
-      window.setTimeout(() => measurePanelHeight(index), 50);
     },
     [measurePanelHeight],
   );
