@@ -338,10 +338,26 @@ function createQueensboroBridgeLayer(): CustomLayerInterface {
       bridge.rotation.z = bridgeAngle;
       scene.add(bridge);
 
-      const steel = new THREE.MeshLambertMaterial({ color: BRIDGE_STEEL_COLOR });
-      const deck = new THREE.MeshLambertMaterial({ color: BRIDGE_DECK_COLOR });
-      const roadway = new THREE.MeshLambertMaterial({ color: 0x414747 });
-      const stone = new THREE.MeshLambertMaterial({ color: BRIDGE_PIER_COLOR });
+      const steel = new THREE.MeshLambertMaterial({
+        color: BRIDGE_STEEL_COLOR,
+        opacity: 1,
+        transparent: false,
+      });
+      const deck = new THREE.MeshLambertMaterial({
+        color: BRIDGE_DECK_COLOR,
+        opacity: 1,
+        transparent: false,
+      });
+      const roadway = new THREE.MeshLambertMaterial({
+        color: 0x414747,
+        opacity: 1,
+        transparent: false,
+      });
+      const stone = new THREE.MeshLambertMaterial({
+        color: BRIDGE_PIER_COLOR,
+        opacity: 1,
+        transparent: false,
+      });
 
       const addBox = (
         length: number,
@@ -1435,7 +1451,7 @@ export function CampusMap() {
           "fill-extrusion-color": ["get", "color"],
           "fill-extrusion-height": ["get", "height"],
           "fill-extrusion-base": ["get", "base"],
-          "fill-extrusion-opacity": 0.93,
+          "fill-extrusion-opacity": 1,
           "fill-extrusion-vertical-gradient": false,
         },
       });
