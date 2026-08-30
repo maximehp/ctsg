@@ -1,9 +1,17 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
-import type { FeatureCollection, Polygon } from "geojson";
-import { Map, setWorkerUrl } from "maplibre-gl";
+import type { Feature, FeatureCollection, Polygon } from "geojson";
+import {
+  Map,
+  MercatorCoordinate,
+  setWorkerUrl,
+  type CustomLayerInterface,
+  type CustomRenderMethodInput,
+} from "maplibre-gl";
 import maplibreWorkerUrl from "maplibre-gl/dist/maplibre-gl-worker.mjs?worker&url";
+import * as THREE from "three";
+import { ROOSEVELT_ISLAND_TREE_POINTS } from "./rooseveltIslandTreePoints";
 
 const CAMERA_TARGET: [number, number] = [-73.9571674, 40.7545844];
 const LOOK_AT_TARGET: [number, number] = [-73.9550837, 40.7559414];
@@ -20,6 +28,22 @@ const FINAL_LEFT_YAW = 3;
 const METERS_PER_LATITUDE_DEGREE = 111_320;
 const MAP_STYLE = "https://basemaps.cartocdn.com/gl/positron-gl-style/style.json";
 const WATER_COLOR = "#67b7e1";
+const TREE_CANOPY_COLORS = ["#679b52", "#76aa5d", "#568a47"] as const;
+const TREE_POLYGON_SIDES = 6;
+const BRIDGE_START: [number, number] = [-73.96072, 40.75953];
+const BRIDGE_END: [number, number] = [-73.9489, 40.75443];
+const BRIDGE_PYLON_POINTS: Array<[number, number]> = [
+  [-73.9591299, 40.7588769],
+  [-73.9554167, 40.7572668],
+  [-73.9534525, 40.7564098],
+  [-73.9503566, 40.7550719],
+];
+const BRIDGE_DECK_HEIGHT = 39;
+const BRIDGE_PEAK_HEIGHT = 110;
+const BRIDGE_APPROACH_LENGTH = 260;
+const BRIDGE_STEEL_COLOR = "#737c78";
+const BRIDGE_DECK_COLOR = "#5e6665";
+const BRIDGE_PIER_COLOR = "#c3bcae";
 const PANEL_CONTENT_VERTICAL_SPACE = 54;
 const ACTIVE_TITLE_SAFE_INSET = 8;
 
@@ -48,6 +72,12 @@ type StyleLayer = {
 };
 
 type CampusBuildingProperties = {
+  color: string;
+  height: number;
+};
+
+type TreeExtrusionProperties = {
+  base: number;
   color: string;
   height: number;
 };
@@ -202,6 +232,400 @@ const CORNELL_TECH_BUILDINGS: FeatureCollection<
     },
   ],
 };
+
+function createTreeFootprint(
+  point: readonly [number, number],
+  radius: number,
+) {
+  const [longitude, latitude] = point;
+  const latitudeRadians = latitude * Math.PI / 180;
+  const longitudeMetersPerDegree =
+    METERS_PER_LATITUDE_DEGREE * Math.cos(latitudeRadians);
+
+  return Array.from({ length: TREE_POLYGON_SIDES + 1 }, (_, index) => {
+    const angle = index / TREE_POLYGON_SIDES * Math.PI * 2;
+
+    return [
+      longitude + Math.cos(angle) * radius / longitudeMetersPerDegree,
+      latitude + Math.sin(angle) * radius / METERS_PER_LATITUDE_DEGREE,
+    ];
+  });
+}
+
+function createTreeExtrusion(
+  point: readonly [number, number],
+  radius: number,
+  properties: TreeExtrusionProperties,
+): Feature<Polygon, TreeExtrusionProperties> {
+  return {
+    type: "Feature",
+    properties,
+    geometry: {
+      type: "Polygon",
+      coordinates: [createTreeFootprint(point, radius)],
+    },
+  };
+}
+
+const ROOSEVELT_ISLAND_TREE_EXTRUSIONS: FeatureCollection<
+  Polygon,
+  TreeExtrusionProperties
+> = {
+  type: "FeatureCollection",
+  features: ROOSEVELT_ISLAND_TREE_POINTS
+    .filter((_, index) => index % 3 === 0)
+    .flatMap((point, index) => {
+      const variation = (index * 47 % 97) / 96;
+      const trunkHeight = 2.3 + variation * 0.8;
+      const canopyRadius = 1.35 + variation;
+      const lowerCanopyHeight = 4.6 + variation * 1.4;
+      const upperCanopyHeight = 6.3 + variation * 1.7;
+      const canopyColor =
+        TREE_CANOPY_COLORS[index % TREE_CANOPY_COLORS.length];
+
+      return [
+        createTreeExtrusion(point, 0.38 + variation * 0.12, {
+          base: 0,
+          color: "#76563a",
+          height: trunkHeight,
+        }),
+        createTreeExtrusion(point, canopyRadius, {
+          base: trunkHeight * 0.65,
+          color: canopyColor,
+          height: lowerCanopyHeight,
+        }),
+        createTreeExtrusion(point, canopyRadius * 0.62, {
+          base: lowerCanopyHeight,
+          color: canopyColor,
+          height: upperCanopyHeight,
+        }),
+      ];
+    }),
+};
+
+function createQueensboroBridgeLayer(): CustomLayerInterface {
+  let renderer: THREE.WebGLRenderer | undefined;
+  let scene: THREE.Scene | undefined;
+  let camera: THREE.Camera | undefined;
+  let modelMatrix: THREE.Matrix4 | undefined;
+
+  return {
+    id: "ct-queensboro-bridge",
+    type: "custom",
+    renderingMode: "3d",
+    onAdd(map, gl) {
+      const center: [number, number] = [
+        (BRIDGE_START[0] + BRIDGE_END[0]) / 2,
+        (BRIDGE_START[1] + BRIDGE_END[1]) / 2,
+      ];
+      const averageLatitude = center[1];
+      const longitudeMetersPerDegree =
+        METERS_PER_LATITUDE_DEGREE * Math.cos(averageLatitude * Math.PI / 180);
+      const east = (BRIDGE_END[0] - BRIDGE_START[0]) * longitudeMetersPerDegree;
+      const north = (BRIDGE_END[1] - BRIDGE_START[1]) * METERS_PER_LATITUDE_DEGREE;
+      const totalLength = Math.hypot(east, north);
+      const bridgeAngle = Math.atan2(-north, east);
+      const origin = MercatorCoordinate.fromLngLat(center, 0);
+      const mercatorScale = origin.meterInMercatorCoordinateUnits();
+
+      modelMatrix = new THREE.Matrix4()
+        .makeTranslation(origin.x, origin.y, origin.z)
+        .scale(new THREE.Vector3(mercatorScale, mercatorScale, mercatorScale));
+      camera = new THREE.Camera();
+      scene = new THREE.Scene();
+
+      const bridge = new THREE.Group();
+      bridge.rotation.z = bridgeAngle;
+      scene.add(bridge);
+
+      const steel = new THREE.MeshLambertMaterial({ color: BRIDGE_STEEL_COLOR });
+      const deck = new THREE.MeshLambertMaterial({ color: BRIDGE_DECK_COLOR });
+      const roadway = new THREE.MeshLambertMaterial({ color: 0x414747 });
+      const stone = new THREE.MeshLambertMaterial({ color: BRIDGE_PIER_COLOR });
+
+      const addBox = (
+        length: number,
+        width: number,
+        height: number,
+        x: number,
+        y: number,
+        z: number,
+        material: THREE.Material,
+      ) => {
+        const mesh = new THREE.Mesh(
+          new THREE.BoxGeometry(length, width, height),
+          material,
+        );
+        mesh.position.set(x, y, z);
+        bridge.add(mesh);
+      };
+
+      const addSlopedBox = (
+        from: [number, number, number],
+        to: [number, number, number],
+        width: number,
+        height: number,
+        material: THREE.Material,
+      ) => {
+        const start = new THREE.Vector3(...from);
+        const end = new THREE.Vector3(...to);
+        const direction = end.clone().sub(start);
+        const mesh = new THREE.Mesh(
+          new THREE.BoxGeometry(direction.length(), width, height),
+          material,
+        );
+        mesh.position.copy(start).add(end).multiplyScalar(0.5);
+        mesh.quaternion.setFromUnitVectors(
+          new THREE.Vector3(1, 0, 0),
+          direction.normalize(),
+        );
+        bridge.add(mesh);
+      };
+
+      const addBeam = (
+        from: [number, number, number],
+        to: [number, number, number],
+        thickness: number,
+      ) => addSlopedBox(from, to, thickness, thickness, steel);
+
+      const startOffset = -totalLength / 2;
+      const endOffset = totalLength / 2;
+      const trussSide = 9.15;
+      const supportPositions = BRIDGE_PYLON_POINTS.map(([longitude, latitude]) => {
+        const pointEast = (longitude - BRIDGE_START[0]) * longitudeMetersPerDegree;
+        const pointNorth = (latitude - BRIDGE_START[1]) * METERS_PER_LATITUDE_DEGREE;
+        return startOffset + (pointEast * east + pointNorth * north) / totalLength;
+      });
+      const spanBoundaries = [startOffset, ...supportPositions, endOffset];
+
+      // Two decks and the outer lower roadways are among the bridge's most
+      // visible signatures. The trusses are 60 feet apart in the 1908 plans.
+      addBox(totalLength, 26.2, 4.2, 0, 0, BRIDGE_DECK_HEIGHT - 2.1, deck);
+      addBox(totalLength, 24.8, 0.7, 0, 0, BRIDGE_DECK_HEIGHT + 0.35, roadway);
+      addBox(totalLength, 18.3, 1.1, 0, 0, BRIDGE_DECK_HEIGHT + 7.4, roadway);
+      for (const side of [-trussSide, trussSide]) {
+        addBox(
+          totalLength,
+          2.1,
+          2.1,
+          0,
+          side,
+          BRIDGE_DECK_HEIGHT + 1.2,
+          steel,
+        );
+      }
+
+      // Replace the first draft's two guessed blocks with the four mapped
+      // pylon footprints that define the original five-span elevation.
+      for (const support of supportPositions) {
+        addBox(18, 26, 6, support, 0, 3, stone);
+        addBox(11, 20, BRIDGE_DECK_HEIGHT - 10, support, 0,
+          6 + (BRIDGE_DECK_HEIGHT - 10) / 2, stone);
+        addBox(16, 23, 4, support, 0, BRIDGE_DECK_HEIGHT - 6, stone);
+
+        for (const side of [-trussSide, trussSide]) {
+          addBeam(
+            [support, side, BRIDGE_DECK_HEIGHT - 1],
+            [support, side, BRIDGE_PEAK_HEIGHT],
+            3.4,
+          );
+          addBeam(
+            [support, side, BRIDGE_PEAK_HEIGHT],
+            [support, side, BRIDGE_PEAK_HEIGHT + 5],
+            1.7,
+          );
+        }
+
+        addBeam(
+          [support, -trussSide, BRIDGE_PEAK_HEIGHT - 4],
+          [support, trussSide, BRIDGE_PEAK_HEIGHT - 4],
+          3.2,
+        );
+        addBeam(
+          [support, -trussSide, BRIDGE_DECK_HEIGHT + 10],
+          [support, trussSide, BRIDGE_PEAK_HEIGHT - 7],
+          1.8,
+        );
+        addBeam(
+          [support, trussSide, BRIDGE_DECK_HEIGHT + 10],
+          [support, -trussSide, BRIDGE_PEAK_HEIGHT - 7],
+          1.8,
+        );
+      }
+
+      for (const anchorage of [startOffset, endOffset]) {
+        addBox(13, 22, BRIDGE_DECK_HEIGHT - 1, anchorage, 0,
+          (BRIDGE_DECK_HEIGHT - 1) / 2, stone);
+        addBox(17, 25, 4, anchorage, 0, BRIDGE_DECK_HEIGHT - 3, stone);
+      }
+
+      // Descending, supported viaducts connect the anchor piers back to the
+      // city. Segmenting the approaches keeps their deck, roadway and side
+      // girders aligned while the columns visibly shorten toward the ground.
+      const approachDrop = BRIDGE_DECK_HEIGHT - 4;
+      const approachSegments = 6;
+
+      for (const direction of [-1, 1]) {
+        const anchor = direction < 0 ? startOffset : endOffset;
+        const farEnd = anchor + direction * BRIDGE_APPROACH_LENGTH;
+
+        for (let segment = 0; segment < approachSegments; segment += 1) {
+          const startProgress = segment / approachSegments;
+          const endProgress = (segment + 1) / approachSegments;
+          const segmentStart = anchor + (farEnd - anchor) * startProgress;
+          const segmentEnd = anchor + (farEnd - anchor) * endProgress;
+          const startHeight = BRIDGE_DECK_HEIGHT - approachDrop * startProgress;
+          const endHeight = BRIDGE_DECK_HEIGHT - approachDrop * endProgress;
+
+          addSlopedBox(
+            [segmentStart, 0, startHeight - 2.1],
+            [segmentEnd, 0, endHeight - 2.1],
+            26.2,
+            4.2,
+            deck,
+          );
+          addSlopedBox(
+            [segmentStart, 0, startHeight + 0.35],
+            [segmentEnd, 0, endHeight + 0.35],
+            24.8,
+            0.7,
+            roadway,
+          );
+          addSlopedBox(
+            [segmentStart, 0, startHeight + 7.4],
+            [segmentEnd, 0, endHeight + 7.4],
+            18.3,
+            1.1,
+            roadway,
+          );
+
+          for (const side of [-trussSide, trussSide]) {
+            addSlopedBox(
+              [segmentStart, side, startHeight + 1.2],
+              [segmentEnd, side, endHeight + 1.2],
+              2.1,
+              2.1,
+              steel,
+            );
+            addSlopedBox(
+              [segmentStart, side, startHeight + 8.2],
+              [segmentEnd, side, endHeight + 8.2],
+              2.2,
+              3.2,
+              steel,
+            );
+          }
+
+          if (segment < approachSegments - 1) {
+            const columnTop = endHeight - 4;
+            for (const side of [-trussSide, trussSide]) {
+              addBeam(
+                [segmentEnd, side, 1.5],
+                [segmentEnd, side, columnTop],
+                2.6,
+              );
+            }
+            addBeam(
+              [segmentEnd, -trussSide, columnTop],
+              [segmentEnd, trussSide, columnTop],
+              2.4,
+            );
+          }
+        }
+
+        addBox(24, 30, 8, farEnd, 0, 4, stone);
+      }
+
+      const profilePoints: Array<[number, number]> = [
+        [spanBoundaries[0], 52],
+        [supportPositions[0], BRIDGE_PEAK_HEIGHT],
+        [(supportPositions[0] + supportPositions[1]) / 2, 55],
+        [supportPositions[1], BRIDGE_PEAK_HEIGHT],
+        [(supportPositions[1] + supportPositions[2]) / 2, 72],
+        [supportPositions[2], BRIDGE_PEAK_HEIGHT],
+        [(supportPositions[2] + supportPositions[3]) / 2, 55],
+        [supportPositions[3], BRIDGE_PEAK_HEIGHT],
+        [spanBoundaries[5], 52],
+      ];
+
+      const topHeightAt = (position: number) => {
+        const nextIndex = profilePoints.findIndex(([x]) => x >= position);
+        if (nextIndex <= 0) {
+          return profilePoints[0][1];
+        }
+
+        const [previousX, previousHeight] = profilePoints[nextIndex - 1];
+        const [nextX, nextHeight] = profilePoints[nextIndex];
+        const progress = (position - previousX) / (nextX - previousX);
+        return previousHeight + (nextHeight - previousHeight) * progress;
+      };
+      const panelPositions: number[] = [];
+      for (let spanIndex = 0; spanIndex < spanBoundaries.length - 1; spanIndex += 1) {
+        const spanStart = spanBoundaries[spanIndex];
+        const spanEnd = spanBoundaries[spanIndex + 1];
+        const panelCount = Math.max(3, Math.round((spanEnd - spanStart) / 20));
+
+        for (let panel = 0; panel < panelCount; panel += 1) {
+          panelPositions.push(
+            spanStart + (spanEnd - spanStart) * panel / panelCount,
+          );
+        }
+      }
+      panelPositions.push(endOffset);
+
+      for (let panelIndex = 0; panelIndex < panelPositions.length - 1; panelIndex += 1) {
+        const position = panelPositions[panelIndex];
+        const nextPosition = panelPositions[panelIndex + 1];
+        const top = topHeightAt(position);
+        const nextTop = topHeightAt(nextPosition);
+
+        for (const side of [-trussSide, trussSide]) {
+          addBeam(
+            [position, side, BRIDGE_DECK_HEIGHT + 1],
+            [position, side, top],
+            supportPositions.includes(position) ? 3.4 : 1.8,
+          );
+          addBeam([position, side, top], [nextPosition, side, nextTop], 2.5);
+
+          if (nextPosition > position + 4) {
+            const slopesUp = panelIndex % 2 === 0;
+            addBeam(slopesUp
+              ? [position, side, BRIDGE_DECK_HEIGHT + 2]
+              : [position, side, top - 1], slopesUp
+              ? [nextPosition, side, nextTop - 1]
+              : [nextPosition, side, BRIDGE_DECK_HEIGHT + 2], 1.8);
+          }
+        }
+      }
+
+      scene.add(new THREE.HemisphereLight(0xeaf7fa, 0x6d736d, 0.75));
+      const sunlight = new THREE.DirectionalLight(0xffffff, 0.65);
+      sunlight.position.set(-200, -300, 600);
+      scene.add(sunlight);
+
+      renderer = new THREE.WebGLRenderer({
+        canvas: map.getCanvas(),
+        context: gl,
+        antialias: true,
+      });
+      renderer.autoClear = false;
+    },
+    render(_gl, options: CustomRenderMethodInput) {
+      if (!renderer || !scene || !camera || !modelMatrix) {
+        return;
+      }
+
+      camera.projectionMatrix = new THREE.Matrix4()
+        .fromArray(options.defaultProjectionData.mainMatrix)
+        .multiply(modelMatrix);
+      renderer.resetState();
+      renderer.render(scene, camera);
+    },
+    onRemove() {
+      renderer?.dispose();
+    },
+  };
+}
 
 function getHue(red: number, green: number, blue: number) {
   const maximum = Math.max(red, green, blue);
@@ -459,16 +883,6 @@ function getVisibleBuildingCenters(
   }
 }
 
-function getVisibleBuildingCentersFromSnapshot(
-  snapshot: HTMLImageElement,
-): VisibleBuildingCenters | null {
-  return getVisibleBuildingCenters(
-    snapshot,
-    snapshot.clientWidth,
-    snapshot.clientHeight,
-  );
-}
-
 function getVisibleBuildingCentersFromCanvas(
   canvas: HTMLCanvasElement,
 ): VisibleBuildingCenters | null {
@@ -575,6 +989,13 @@ export function CampusMap() {
       return;
     }
 
+    // Mobile panels have explicit, content-safe heights. Measuring them after
+    // the transition starts causes a second render and height animation, which
+    // is noticeably janky on phones.
+    if (window.matchMedia("(max-width: 640px)").matches) {
+      return;
+    }
+
     const content = panelContentRefs.current.get(activeStop);
     if (!content) {
       return;
@@ -667,16 +1088,6 @@ export function CampusMap() {
       // new size instead of leaving that stretched image in place.
       if (!isStaticMapInPlaceRef.current || isDisposed) {
         return;
-      }
-
-      const snapshot = snapshotRef.current;
-      const visibleBuildingCenters = snapshot
-        ? getVisibleBuildingCentersFromSnapshot(snapshot)
-        : null;
-
-      if (visibleBuildingCenters) {
-        visibleBuildingCentersRef.current = visibleBuildingCenters;
-        updateMarkerPositions(visibleBuildingCenters);
       }
 
       if (resizeRefreshTimeout !== undefined) {
@@ -840,30 +1251,40 @@ export function CampusMap() {
     };
 
     const revealTourAfterCamera = () => {
-      if (shouldSkipTourRevealRef.current) {
-        return;
-      }
+      const shouldRevealTour = !shouldSkipTourRevealRef.current;
 
       // Wait for the final camera frame to settle so the controls use the
       // highlighted building centers from the completed view, rather than
       // appearing at projected coordinates and shifting after the handoff.
       map.once("idle", () => {
-        if (isDisposed || shouldSkipTourRevealRef.current) {
+        if (isDisposed) {
           return;
         }
 
-        const finalCenters = getVisibleBuildingCentersFromCanvas(map.getCanvas());
-        if (!finalCenters) {
-          return;
-        }
+        // Measure highlighted buildings in a dedicated tree-free frame. The
+        // trees remain in the visual snapshot, but can never occlude pixels or
+        // move the calculated campaign anchors.
+        map.setLayoutProperty("ct-island-trees", "visibility", "none");
+        map.once("render", () => {
+          const finalCenters = getVisibleBuildingCentersFromCanvas(map.getCanvas());
+          map.setLayoutProperty("ct-island-trees", "visibility", "visible");
+          map.triggerRepaint();
 
-        visibleBuildingCentersRef.current = finalCenters;
-        updateMarkerPositions(finalCenters);
+          if (!finalCenters) {
+            return;
+          }
 
-        // The static-map handoff below keeps this overlay in place rather
-        // than recalculating its coordinates after it becomes visible.
-        shouldSkipTourRevealRef.current = true;
-        revealTour();
+          visibleBuildingCentersRef.current = finalCenters;
+          updateMarkerPositions(finalCenters);
+
+          if (shouldRevealTour) {
+            // The static-map handoff below keeps this overlay in place rather
+            // than recalculating its coordinates after it becomes visible.
+            shouldSkipTourRevealRef.current = true;
+            revealTour();
+          }
+        });
+        map.triggerRepaint();
       });
     };
 
@@ -952,6 +1373,27 @@ export function CampusMap() {
         },
       });
 
+      map.addLayer(createQueensboroBridgeLayer());
+
+      map.addSource("ct-island-trees", {
+        type: "geojson",
+        data: ROOSEVELT_ISLAND_TREE_EXTRUSIONS,
+      });
+
+      map.addLayer({
+        id: "ct-island-trees",
+        type: "fill-extrusion",
+        source: "ct-island-trees",
+        minzoom: 12,
+        paint: {
+          "fill-extrusion-color": ["get", "color"],
+          "fill-extrusion-height": ["get", "height"],
+          "fill-extrusion-base": ["get", "base"],
+          "fill-extrusion-opacity": 0.93,
+          "fill-extrusion-vertical-gradient": false,
+        },
+      });
+
       map.addLayer({
         id: "ct-campus-clay-buildings",
         type: "fill-extrusion",
@@ -969,7 +1411,18 @@ export function CampusMap() {
             [
               "in",
               ["id"],
-              ["literal", [266199261, 524729284, 922315193]],
+              [
+                "literal",
+                [
+                  266199261,
+                  524729284,
+                  922315193,
+                  1016487154,
+                  1016487155,
+                  1016487157,
+                  1016487159,
+                ],
+              ],
             ],
           ],
         ],
@@ -1106,8 +1559,6 @@ export function CampusMap() {
     const revealAfterSnapshotPaints = () => {
       const shouldRevealTour = !shouldSkipTourRevealRef.current;
       shouldSkipTourRevealRef.current = false;
-      visibleBuildingCentersRef.current =
-        getVisibleBuildingCentersFromSnapshot(snapshot);
       updateMarkerPositionsRef.current?.(visibleBuildingCentersRef.current);
 
       if (shouldRevealTour) {

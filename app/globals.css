@@ -514,7 +514,25 @@ a {
 
   .building-marker--active .building-marker__surface {
     width: min(280px, calc(100vw - 40px));
-    height: var(--panel-content-height, var(--panel-mobile-height));
+    height: var(--panel-mobile-height);
+  }
+
+  .building-marker__surface {
+    contain: layout paint;
+    transition:
+      width 110ms cubic-bezier(0.2, 0.8, 0.2, 1),
+      height 120ms cubic-bezier(0.2, 0.8, 0.2, 1),
+      left 110ms cubic-bezier(0.2, 0.8, 0.2, 1),
+      border-radius 100ms ease,
+      box-shadow 120ms ease;
+  }
+
+  .building-marker--active .building-marker__content {
+    transition-delay: 90ms;
+  }
+
+  .building-marker--active .building-marker__next {
+    transition-delay: 130ms, 130ms, 0ms;
   }
 
   .building-marker__content p {
