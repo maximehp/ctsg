@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useLayoutEffect, useRef, useState } from "react";
 import type { Feature, FeatureCollection, Polygon } from "geojson";
 import {
   Map,
@@ -984,15 +984,75 @@ export function CampusMap() {
     "visible" | "leaving" | "hidden"
   >("visible");
 
-  useEffect(() => {
-    if (activeStop === null) {
+  const measurePanelHeight = useCallback((index: number) => {
+    const content = panelContentRefs.current.get(index);
+    if (!content) {
       return;
     }
 
-    // Mobile panels have explicit, content-safe heights. Measuring them after
-    // the transition starts causes a second render and height animation, which
-    // is noticeably janky on phones.
-    if (window.matchMedia("(max-width: 640px)").matches) {
+    const nextButton = content.querySelector<HTMLElement>(
+      ".building-marker__next",
+    );
+    const surface = content.closest<HTMLElement>(".building-marker__surface");
+    const section = CAMPAIGN_SECTIONS[SECTION_BUILDING_ORDER.indexOf(index)];
+    const requestedWidth = section.panelWidth ?? (section.image ? 300 : 250);
+    const expandedWidth = window.matchMedia("(max-width: 640px)").matches
+      ? Math.min(280, window.innerWidth - 40)
+      : Math.min(requestedWidth, window.innerWidth - 44);
+    const contentTransition = content.style.transition;
+    const contentTransform = content.style.transform;
+    const nextTransition = nextButton?.style.transition ?? "";
+    const nextTransform = nextButton?.style.transform ?? "";
+    const surfaceTransition = surface?.style.transition ?? "";
+    const surfaceWidth = surface?.style.width ?? "";
+
+    // Closed panels offset their hidden content for the entrance animation.
+    // Neutralize those transforms only while measuring so the stored height
+    // matches the fully open panel, then restore them before the frame paints.
+    content.style.transition = "none";
+    content.style.transform = "translateY(0)";
+    if (nextButton) {
+      nextButton.style.transition = "none";
+      nextButton.style.transform = "translateY(0)";
+    }
+    if (surface) {
+      surface.style.transition = "none";
+      surface.style.width = `${expandedWidth}px`;
+    }
+
+    const height = Math.ceil(
+      content.getBoundingClientRect().height + PANEL_CONTENT_VERTICAL_SPACE,
+    );
+
+    content.style.transition = contentTransition;
+    content.style.transform = contentTransform;
+    if (nextButton) {
+      nextButton.style.transition = nextTransition;
+      nextButton.style.transform = nextTransform;
+    }
+    if (surface) {
+      surface.style.transition = surfaceTransition;
+      surface.style.width = surfaceWidth;
+    }
+
+    setPanelContentHeights((current) =>
+      current[index] === height ? current : { ...current, [index]: height },
+    );
+  }, []);
+
+  const openPanel = useCallback(
+    (index: number) => {
+      // Content keeps its expanded width while clipped inside the closed pill,
+      // so its exact height is available before the opening transition starts.
+      measurePanelHeight(index);
+      setActiveStop(index);
+      window.setTimeout(() => measurePanelHeight(index), 50);
+    },
+    [measurePanelHeight],
+  );
+
+  useLayoutEffect(() => {
+    if (activeStop === null) {
       return;
     }
 
@@ -1001,30 +1061,21 @@ export function CampusMap() {
       return;
     }
 
-    const updatePanelHeight = () => {
-      const height = Math.ceil(
-        content.getBoundingClientRect().height + PANEL_CONTENT_VERTICAL_SPACE,
-      );
-
-      setPanelContentHeights((current) =>
-        current[activeStop] === height
-          ? current
-          : { ...current, [activeStop]: height },
-      );
-    };
-
-    let observer: ResizeObserver | undefined;
-    const measurementTimeout = window.setTimeout(() => {
-      updatePanelHeight();
-      observer = new ResizeObserver(updatePanelHeight);
-      observer.observe(content);
-    }, 160);
+    measurePanelHeight(activeStop);
+    const observer = new ResizeObserver(() => measurePanelHeight(activeStop));
+    observer.observe(content);
+    let isCancelled = false;
+    void document.fonts.ready.then(() => {
+      if (!isCancelled) {
+        measurePanelHeight(activeStop);
+      }
+    });
 
     return () => {
-      window.clearTimeout(measurementTimeout);
-      observer?.disconnect();
+      isCancelled = true;
+      observer.disconnect();
     };
-  }, [activeStop]);
+  }, [activeStop, measurePanelHeight]);
 
   useEffect(() => {
     if (mapStatus === "unavailable") {
@@ -1244,7 +1295,7 @@ export function CampusMap() {
         updateMarkerPositions();
         setIsTourVisible(true);
         initialPanelTimeoutRef.current = window.setTimeout(() => {
-          setActiveStop(SECTION_BUILDING_ORDER[0]);
+          openPanel(SECTION_BUILDING_ORDER[0]);
           initialPanelTimeoutRef.current = undefined;
         }, 120);
       });
@@ -1548,7 +1599,7 @@ export function CampusMap() {
       removeMapRef.current = null;
       removeMap();
     };
-  }, [mapGeneration]);
+  }, [mapGeneration, openPanel]);
 
   const handleSnapshotLoad = () => {
     if (snapshotHandoffScheduledRef.current) {
@@ -1617,7 +1668,7 @@ export function CampusMap() {
                 window.clearTimeout(initialPanelTimeoutRef.current);
                 initialPanelTimeoutRef.current = undefined;
               }
-              setActiveStop(index);
+              openPanel(index);
             };
 
             return (
@@ -1671,6 +1722,7 @@ export function CampusMap() {
                         className="building-marker__image"
                         src={getAssetUrl(section.image.src)}
                         alt={section.image.alt}
+                        onLoad={() => measurePanelHeight(index)}
                       />
                     )}
                     {section.summary && (
@@ -1689,11 +1741,11 @@ export function CampusMap() {
                       className="building-marker__next"
                       type="button"
                       onClick={() => {
-                        setActiveStop(
-                          isFinalSection
-                            ? null
-                            : SECTION_BUILDING_ORDER[sectionIndex + 1],
-                        );
+                        if (isFinalSection) {
+                          setActiveStop(null);
+                        } else {
+                          openPanel(SECTION_BUILDING_ORDER[sectionIndex + 1]);
+                        }
                       }}
                       aria-label={
                         isFinalSection ? "Close campaign sections" : `Open ${nextSection.title}`
