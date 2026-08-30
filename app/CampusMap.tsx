@@ -340,21 +340,29 @@ function createQueensboroBridgeLayer(): CustomLayerInterface {
 
       const steel = new THREE.MeshLambertMaterial({
         color: BRIDGE_STEEL_COLOR,
+        blending: THREE.NoBlending,
+        depthWrite: true,
         opacity: 1,
         transparent: false,
       });
       const deck = new THREE.MeshLambertMaterial({
         color: BRIDGE_DECK_COLOR,
+        blending: THREE.NoBlending,
+        depthWrite: true,
         opacity: 1,
         transparent: false,
       });
       const roadway = new THREE.MeshLambertMaterial({
         color: 0x414747,
+        blending: THREE.NoBlending,
+        depthWrite: true,
         opacity: 1,
         transparent: false,
       });
       const stone = new THREE.MeshLambertMaterial({
         color: BRIDGE_PIER_COLOR,
+        blending: THREE.NoBlending,
+        depthWrite: true,
         opacity: 1,
         transparent: false,
       });
@@ -1279,7 +1287,7 @@ export function CampusMap() {
           const url = URL.createObjectURL(snapshot);
           snapshotUrlRef.current = url;
           setStaticMapUrl(url);
-        }, "image/webp", 0.92);
+        }, "image/png");
       } catch {
         // Keep the live map visible if a browser blocks canvas snapshots.
       }
@@ -1375,6 +1383,12 @@ export function CampusMap() {
 
         if (!isBaseLayer) {
           map.setLayoutProperty(layer.id, "visibility", "none");
+        } else if (layer.type === "background") {
+          map.setPaintProperty(layer.id, "background-opacity", 1);
+        } else if (layer.type === "fill") {
+          map.setPaintProperty(layer.id, "fill-opacity", 1);
+        } else if (layer.type === "line") {
+          map.setPaintProperty(layer.id, "line-opacity", 1);
         }
 
         if (
@@ -1402,7 +1416,7 @@ export function CampusMap() {
         ],
         paint: {
           "fill-color": "#d5e4a8",
-          "fill-opacity": 0.88,
+          "fill-opacity": 1,
         },
       });
 
@@ -1414,7 +1428,7 @@ export function CampusMap() {
         filter: ["in", "class", "university", "pitch", "playground"],
         paint: {
           "fill-color": "#c8dda0",
-          "fill-opacity": 0.84,
+          "fill-opacity": 1,
         },
       });
 
@@ -1431,7 +1445,7 @@ export function CampusMap() {
         paint: {
           "line-color": "#f6f1df",
           "line-width": ["interpolate", ["linear"], ["zoom"], 13, 0.5, 16, 1.4, 18, 2.8],
-          "line-opacity": 0.9,
+          "line-opacity": 1,
         },
       });
 
@@ -1520,7 +1534,7 @@ export function CampusMap() {
             ["get", "min_height"],
             0,
           ],
-          "fill-extrusion-opacity": 0.94,
+          "fill-extrusion-opacity": 1,
           "fill-extrusion-vertical-gradient": false,
         },
       });
