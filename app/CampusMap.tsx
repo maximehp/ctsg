@@ -1016,7 +1016,9 @@ export function CampusMap() {
     contentCopy.style.inset = "auto";
     contentCopy.style.top = "0";
     contentCopy.style.left = "-10000px";
-    contentCopy.style.width = `${content.getBoundingClientRect().width}px`;
+    // Use the layout width, not the transformed screen width. The initial
+    // auto-open can run while its marker is still scaling into view.
+    contentCopy.style.width = getComputedStyle(content).width;
     contentCopy.style.height = "auto";
     contentCopy.style.opacity = "0";
     contentCopy.style.transition = "none";
