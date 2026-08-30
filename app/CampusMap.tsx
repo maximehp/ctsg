@@ -19,6 +19,7 @@ const ORBIT_TURNS = 0.5;
 const FINAL_LEFT_YAW = 3;
 const METERS_PER_LATITUDE_DEGREE = 111_320;
 const MAP_STYLE = "https://basemaps.cartocdn.com/gl/positron-gl-style/style.json";
+const WATER_COLOR = "#67b7e1";
 const PANEL_CONTENT_VERTICAL_SPACE = 54;
 const ACTIVE_TITLE_SAFE_INSET = 8;
 
@@ -891,6 +892,18 @@ export function CampusMap() {
 
         if (!isBaseLayer) {
           map.setLayoutProperty(layer.id, "visibility", "none");
+        }
+
+        if (
+          layer["source-layer"] === "water" &&
+          layer.type === "fill" &&
+          !layer.id.includes("shadow")
+        ) {
+          map.setPaintProperty(layer.id, "fill-color", WATER_COLOR);
+        }
+
+        if (layer["source-layer"] === "waterway" && layer.type === "line") {
+          map.setPaintProperty(layer.id, "line-color", WATER_COLOR);
         }
       }
 
