@@ -402,8 +402,8 @@ a {
 }
 
 .building-marker--with-image .building-marker__content p {
-  font-size: clamp(12px, 0.7vw, 14px);
-  line-height: 1.23;
+  font-size: 13px;
+  line-height: 1.22;
 }
 
 .building-marker__image {
@@ -539,7 +539,9 @@ a {
   }
 
   .building-marker--with-image .building-marker__content p {
+    font-size: 12px;
     hyphens: none;
+    line-height: 1.22;
     text-align: left;
     text-wrap: pretty;
   }
